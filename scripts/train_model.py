@@ -1,4 +1,4 @@
-from src.data.preprocessor import Preprocessor
+from src.data.preprocessor_sofia import Preprocessor
 from src.models.classifier import ImageClassifier
 from src.utils.logger import get_logger
 from src.utils.seed import set_seed
