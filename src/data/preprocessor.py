@@ -4,6 +4,9 @@ from pathlib import Path
 from PIL import Image
 from torchvision import transforms
 import torchvision.transforms.functional as F
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
+import numpy as np
 
 from src.utils.seed import set_seed
 from src.utils.paths import TRAIN_VAL_DIR
@@ -92,7 +95,7 @@ class TransformDataset(Dataset):
 #   2 → rotation (fixed angle) - change rotation angle here
 #   3 → gaussian blur (simulates denoising) - change blur kernel and sigma values here
 class DeterministicAugmentedDataset(Dataset):
-    VARIANTS = ["original", "hflip", "rotation", "gaussian_blur"]
+    VARIANTS = ["original", "hflip", "rotation", "gaussian_blur", "elastic"]
 
     def __init__(self, dataset, plain_tf, image_size, mean, std,
                  rotation_angle=90, blur_kernel=7, blur_sigma=1.0):
@@ -133,6 +136,20 @@ class DeterministicAugmentedDataset(Dataset):
                 transforms.ToTensor(),
                 transforms.Normalize(mean, std),
             ]),
+
+            "elastic": transforms.Compose([
+                resize_pad,
+                transforms.Lambda(lambda img: np.array(img)),  # PIL → numpy for albumentations
+                transforms.Lambda(lambda img: A.ElasticTransform(
+                    alpha=30,  # low alpha = weak deformation, keeps morphology intact
+                    sigma=5,  # smoothness of deformation field
+                    alpha_affine=0,  # no affine component
+                    p=1.0  # always apply (deterministic)
+                )(image=img)["image"]),
+                transforms.Lambda(lambda img: Image.fromarray(img)),  # numpy → PIL
+                transforms.ToTensor(),
+                transforms.Normalize(mean, std),
+            ]),
         }
 
         logger.info(
@@ -144,7 +161,7 @@ class DeterministicAugmentedDataset(Dataset):
         return len(self.dataset) * len(self.VARIANTS)
 
     def __getitem__(self, idx):
-        variant_idx = idx % len(self.VARIANTS)         # 0, 1, 2, or 3
+        variant_idx = idx % len(self.VARIANTS)         # 0, 1, 2, 3, or 4
         real_idx = idx // len(self.VARIANTS)           # which base image
 
         variant_name = self.VARIANTS[variant_idx]
