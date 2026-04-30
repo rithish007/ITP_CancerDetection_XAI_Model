@@ -1,15 +1,14 @@
 import torch
-from torch.utils.data import Dataset, DataLoader, random_split
+from torch.utils.data import Dataset, DataLoader, random_split, Subset
+from sklearn.model_selection import StratifiedKFold
 from pathlib import Path
 from PIL import Image
 from torchvision import transforms
 import torchvision.transforms.functional as F
 import albumentations as A
-from albumentations.pytorch import ToTensorV2
 import numpy as np
 
 from src.utils.seed import set_seed
-from src.utils.paths import TRAIN_VAL_DIR
 from src.utils.logger import get_logger
 
 logger = get_logger("data_pipeline")
@@ -233,6 +232,90 @@ def get_transforms(image_size=224, mean=None, std=None):
 
 
 # 6. DATA LOADER PIPELINE
+def build_dataloaders_from_subsets(train_subset, val_subset, batch_size=32, image_size=224, seed=42, num_workers=0, mode="train", compute_stats=True):
+    logger.info(f"Creating dataloaders from subsets (mode={mode})")
+
+    set_seed(seed)
+
+    # Compute stats from training data ONLY
+    if compute_stats:
+        mean, std = compute_mean_std(train_subset, image_size=image_size)
+    else:
+        mean, std = [0.5]*3, [0.5]*3
+
+    plain_tf, val_tf = get_transforms(image_size, mean, std)
+
+    if mode == "debug":
+        logger.info("Debug mode: using original images only, no augmentation")
+        train_dataset = TransformDataset(train_subset, plain_tf)
+    else:
+        train_dataset = DeterministicAugmentedDataset(
+            train_subset,
+            plain_tf=plain_tf,
+            image_size=image_size,
+            mean=mean,
+            std=std,
+            rotation_angle=15,
+            blur_kernel=5,
+            blur_sigma=1.0
+        )
+
+    val_dataset = TransformDataset(val_subset, val_tf)
+
+    if batch_size == "full":
+        logger.info("Using full dataset as one batch")
+        train_batch_size = len(train_dataset)
+        val_batch_size = len(val_dataset)
+    else:
+        train_batch_size = batch_size
+        val_batch_size = batch_size
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=train_batch_size,
+        shuffle=(mode == "train"),
+        num_workers=num_workers if mode == "train" else 0,
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=val_batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+    )
+
+    logger.info("DataLoaders ready")
+
+    return train_loader, val_loader, mean, std
+
+def create_cv_dataloaders(root_dir, n_splits=5, batch_size=32, image_size=224, seed=42, num_workers=0, mode="train", compute_stats=True):
+    logger.info(f"Initializing {n_splits}-fold cross-validation pipeline")
+
+    set_seed(seed)
+    base_dataset = MicroscopyDataset(root_dir)
+
+    if len(base_dataset) == 0:
+        logger.warning("Empty dataset")
+        return
+
+    labels = [
+        base_dataset.class_to_idx[path.parent.name]
+        for path in base_dataset.image_paths
+    ]
+
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=seed)
+
+    for fold, (train_idx, val_idx) in enumerate(skf.split(base_dataset.image_paths, labels), start=1):
+        logger.info(f"Preparing fold {fold}/{n_splits}")
+
+        train_subset = Subset(base_dataset, train_idx)
+        val_subset = Subset(base_dataset, val_idx)
+
+        logger.info(f"Fold {fold}: {len(train_subset)} train / {len(val_subset)} val")
+        train_loader, val_loader, mean, std = build_dataloaders_from_subsets(train_subset=train_subset, val_subset=val_subset, batch_size=batch_size, image_size=image_size, seed=seed, num_workers=num_workers, mode=mode, compute_stats=compute_stats)
+
+        yield fold, train_loader, val_loader
+
 def create_dataloaders(
     root_dir,
     batch_size=32,
@@ -245,17 +328,13 @@ def create_dataloaders(
 ):
     logger.info(f"Initializing dataset pipeline (mode={mode})")
 
-    if mode == "debug":
-        logger.info("DEBUG MODE: deterministic")
-        set_seed(seed)
-
+    set_seed(seed)
     base_dataset = MicroscopyDataset(root_dir)
 
     if len(base_dataset) == 0:
         logger.warning("Empty dataset")
         return None, None
 
-    # Split FIRST before computing stats
     generator = torch.Generator().manual_seed(seed)
 
     train_size = int((1 - val_split) * len(base_dataset))
@@ -269,72 +348,27 @@ def create_dataloaders(
 
     logger.info(f"Split: {train_size} train / {val_size} val")
 
-    # Compute stats from training data ONLY
-    if compute_stats:
-        mean, std = compute_mean_std(train_subset, image_size=image_size)
-    else:
-        mean, std = [0.5]*3, [0.5]*3
+    return build_dataloaders_from_subsets(train_subset=train_subset, val_subset=val_subset, batch_size=batch_size, image_size=image_size, seed=seed, num_workers=num_workers, mode=mode, compute_stats=compute_stats)
 
-    # Transforms
-    plain_tf, val_tf = get_transforms(image_size, mean, std)
+def create_test_dataloader(root_dir, batch_size=32, image_size=224, mean=None, std=None, num_workers=0):
+    logger.info("Initializing test dataloader")
 
-    if mode == "debug":
-        logger.info("Debug mode: using original images only, no augmentation")
-        train_dataset = TransformDataset(train_subset, plain_tf)
-    else:
-        train_dataset = DeterministicAugmentedDataset(
-            train_subset,
-            plain_tf=plain_tf,
-            image_size=image_size,
-            mean=mean,
-            std=std,
-            rotation_angle=15,    # fixed rotation angle, always the same
-            blur_kernel=5,        # must be odd
-            blur_sigma=1.0        # fixed sigma, always the same
-        )
+    test_dataset = MicroscopyDataset(root_dir)
 
-    val_dataset = TransformDataset(val_subset, val_tf)
+    if len(test_dataset) == 0:
+        logger.warning("Empty test dataset")
+        return None
 
-    # Full batch support
-    if batch_size == "full":
-        logger.info("Using full dataset as one batch")
-        batch_size = len(train_dataset)
+    _, test_tf = get_transforms(image_size, mean, std)
+    test_dataset = TransformDataset(test_dataset, test_tf)
 
-    train_loader = DataLoader(
-        train_dataset,
-        batch_size=batch_size,
-        shuffle=(mode == "train"),
-        num_workers=num_workers if mode == "train" else 0,
-    )
-
-    val_loader = DataLoader(
-        val_dataset,
+    test_loader = DataLoader(
+        test_dataset,
         batch_size=batch_size,
         shuffle=False,
         num_workers=num_workers,
     )
 
-    logger.info("DataLoaders ready")
+    logger.info(f"Test DataLoader ready with {len(test_dataset)} images")
 
-    return train_loader, val_loader
-
-
-"""
-# TEST
-if __name__ == "__main__":
-    DATA_DIR = TRAIN_VAL_DIR
-
-    train_loader, val_loader = create_dataloaders(
-        DATA_DIR,
-        batch_size="full", # Use "full" the entire training dataset or any number for batched size
-        mode="train", # Use "train" for random order of images or "debug" for fixed order
-        compute_stats=True
-    )
-
-    for images, labels in train_loader:
-        logger.info(f"Batch shape: {images.shape}")
-        logger.info(f"Labels shape: {labels.shape}")
-        logger.info(f"Labels: {labels}")
-        break
-
-"""
+    return test_loader

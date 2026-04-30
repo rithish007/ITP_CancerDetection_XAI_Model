@@ -1,15 +1,11 @@
 import matplotlib.pyplot as plt
 import torch
-import numpy as np
 import random
-from torchvision import transforms
-import torchvision.transforms.functional as F
 from torch.utils.data import Subset
 
 from src.data.preprocessor import (
     MicroscopyDataset,
     DeterministicAugmentedDataset,
-    ResizeWithPadding,
     compute_mean_std,
     get_transforms
 )
