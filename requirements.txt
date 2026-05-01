@@ -2,3 +2,6 @@ python
 torch
 torchvision
 numpy
+matplotlib
+albumentations
+scikit-learn

@@ -9,10 +9,7 @@ def get_logger(stage: str) -> logging.Logger:
         return logger
 
     logger.setLevel(logging.INFO)
-
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
