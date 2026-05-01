@@ -1,0 +1,24 @@
+{
+    "model_name": "densenet121",
+    "num_classes": 2,
+    "pretrained": true,
+    "head_type": "mlp",
+    "dropout": 0.3,
+    "learning_rate": 0.01,
+    "optimizer_name": "adamw",
+    "weight_decay": 0.0001,
+    "freeze_backbone": false,
+    "epochs": 20,
+    "batch_size": 32,
+    "image_size": 224,
+    "mean": [
+        0.08685687929391861,
+        0.09338514506816864,
+        0.02194921299815178
+    ],
+    "std": [
+        0.1409023106098175,
+        0.1807115226984024,
+        0.06098487228155136
+    ]
+}
