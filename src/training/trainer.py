@@ -1,22 +1,24 @@
-import torch
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
 from src.utils.logger import get_logger
 
 logger = get_logger("trainer")
 
 
-def calculate_metrics(y_true, y_pred):
-    accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred, average="binary", zero_division=0)
-    recall = recall_score(y_true, y_pred, average="binary", zero_division=0)
-    f1 = f1_score(y_true, y_pred, average="binary", zero_division=0)
-
-    return {
-        "accuracy": accuracy,
-        "precision": precision,
-        "recall": recall,
-        "f1": f1
+def calculate_metrics(y_true, y_pred, y_probs=None):
+    cm = confusion_matrix(y_true, y_pred)
+    tn, fp, fn, tp = cm.ravel()
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+    metrics = {
+        "accuracy": accuracy_score(y_true, y_pred),
+        "precision": precision_score(y_true, y_pred, average="binary", zero_division=0),
+        "recall": recall_score(y_true, y_pred, average="binary", zero_division=0),
+        "f1": f1_score(y_true, y_pred, average="binary", zero_division=0),
+        "specificity": specificity,
+        "confusion_matrix": cm.tolist()
     }
+    if y_probs is not None:
+        metrics["roc_auc"] = roc_auc_score(y_true, y_probs)
+    return metrics
 
 
 def train_one_epoch(classifier, train_loader):
@@ -56,6 +58,7 @@ def validate(classifier, val_loader):
 
     all_preds = []
     all_labels = []
+    all_probs = []
 
     for images, labels in val_loader:
         result = classifier.eval_step(images, labels)
@@ -68,11 +71,12 @@ def validate(classifier, val_loader):
 
         all_preds.extend(result["predictions"].numpy())
         all_labels.extend(result["labels"].numpy())
+        all_probs.extend(result["probabilities"].numpy())
 
     epoch_loss = total_loss / total_samples
     epoch_accuracy = total_correct / total_samples
 
-    metrics = calculate_metrics(all_labels, all_preds)
+    metrics = calculate_metrics(all_labels, all_preds, all_probs)
     metrics["loss"] = epoch_loss
     metrics["accuracy"] = epoch_accuracy
 
