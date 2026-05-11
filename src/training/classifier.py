@@ -110,6 +110,7 @@ class ImageClassifier:
             outputs = self.model(images)
             loss = self.criterion(outputs, labels)
             predictions = torch.argmax(outputs, dim=1)
+            probabilities = torch.softmax(outputs, dim=1)[:, 1]
 
         correct = (predictions == labels).sum().item()
         total = labels.size(0)
@@ -119,7 +120,8 @@ class ImageClassifier:
             "correct": correct,
             "total": total,
             "predictions": predictions.detach().cpu(),
-            "labels": labels.detach().cpu()
+            "labels": labels.detach().cpu(),
+            "probabilities": probabilities.detach().cpu()
         }
 
     def predict(self, images):

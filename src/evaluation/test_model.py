@@ -1,5 +1,5 @@
 import json
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix, roc_auc_score
 
 from src.utils.paths import TEST_DIR
 from src.utils.logger import get_logger
@@ -9,26 +9,35 @@ from src.training.classifier import ImageClassifier
 logger = get_logger("test_model")
 
 
-def calculate_metrics(y_true, y_pred):
-    return {
+def calculate_metrics(y_true, y_pred, y_probs=None):
+    cm = confusion_matrix(y_true, y_pred)
+    tn, fp, fn, tp = cm.ravel()
+    specificity = tn / (tn + fp) if (tn + fp) > 0 else 0
+    metrics = {
         "accuracy": accuracy_score(y_true, y_pred),
         "precision": precision_score(y_true, y_pred, average="binary", zero_division=0),
         "recall": recall_score(y_true, y_pred, average="binary", zero_division=0),
         "f1": f1_score(y_true, y_pred, average="binary", zero_division=0),
-        "confusion_matrix": confusion_matrix(y_true, y_pred).tolist()
+        "specificity": specificity,
+        "confusion_matrix": cm.tolist()
     }
+    if y_probs is not None:
+        metrics["roc_auc"] = roc_auc_score(y_true, y_probs)
+    return metrics
 
 
 def evaluate_model(classifier, test_loader):
     all_preds = []
     all_labels = []
+    all_probs = []
 
     for images, labels in test_loader:
         result = classifier.eval_step(images, labels)
         all_preds.extend(result["predictions"].numpy())
         all_labels.extend(result["labels"].numpy())
+        all_probs.extend(result["probabilities"].numpy())
 
-    return calculate_metrics(all_labels, all_preds)
+    return calculate_metrics(all_labels, all_preds, all_probs)
 
 
 def main(full_model=True):
@@ -84,6 +93,8 @@ def main(full_model=True):
         logger.info(f"Test Recall: {metrics['recall']:.4f}")
         logger.info(f"Test F1: {metrics['f1']:.4f}")
         logger.info(f"Confusion Matrix: {metrics['confusion_matrix']}")
+        logger.info(f"Test Specificity: {metrics['specificity']:.4f}")
+        logger.info(f"Test ROC-AUC: {metrics['roc_auc']:.4f}")
 
         logger.info("Testing completed successfully")
 
