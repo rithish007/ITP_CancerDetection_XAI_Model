@@ -128,7 +128,7 @@ Implemented augmentations include:
 Run preprocessing only scripts:
 
 ```bash
-python scripts/run_preprocessing.py
+python scripts/preprocessing.py
 python scripts/visual_test.py
 ```
 
