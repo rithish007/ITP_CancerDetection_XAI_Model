@@ -28,18 +28,19 @@ XAI Visualization
 project/
 │
 ├── data/
-│   ├── train_val/
-│   │   ├── normal/
-│   │   └── cancer/
-│   │
-│   ├── test/
+│   ├── sample_images/              # training & validation images
 │   │   ├── normal/
 │   │   └── cancer/
 │   │
 │   └── outputs/
-│       ├── models/
-│       ├── logs/
-│       └── xai/
+│       ├── models/                 # trained model weights, configs, history, plots
+│       ├── logs/                   # runtime logs
+│       ├── xai_results/            # custom XAI method outputs (run_metrics.py)
+│       │   ├── normal/
+│       │   └── cancer/
+│       └── xai_gradcam_pkg/        # pytorch-grad-cam outputs (run_gradcam_pkg.py)
+│           ├── normal/
+│           └── cancer/
 │
 ├── src/
 │   ├── data/
@@ -54,7 +55,12 @@ project/
 │   │   └── test_model.py
 │   │
 │   ├── xai/
-│   │   └── gradcam.py
+│   │   ├── gradcam.py
+│   │   ├── gradcam_plus_plus.py
+│   │   ├── eigencam.py
+│   │   ├── scorecam.py
+│   │   ├── run_metrics.py
+│   │   └── run_gradcam_pkg.py
 │   │
 │   └── utils/
 │       ├── logger.py
@@ -69,6 +75,7 @@ project/
 │   └── visual_test.py
 │
 ├── requirements.txt
+├── .gitignore
 └── README.md
 ```
 
@@ -81,6 +88,8 @@ Create a virtual environment and install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+
+> **GPU support:** `requirements.txt` installs the CPU-only build of PyTorch by default. To use an NVIDIA GPU, install `torch` and `torchvision` with the matching CUDA version by following the official instructions at [pytorch.org/get-started](https://pytorch.org/get-started/locally/).
 
 ---
 
@@ -231,17 +240,23 @@ The project includes explainability methods for visualizing model attention and 
 Current XAI implementations:
 
 * Grad-CAM
+* Grad-CAM++
+* EigenCAM
+* Score-CAM
+* HiResCAM (via pypi grad-cam)
 
 Generated visualizations are stored in:
 
 ```text
-data/outputs/xai/
+data/outputs/xai_results/         # custom implementations
+data/outputs/xai_gradcam_pkg/     # pytorch-grad-cam library
 ```
 
 Run XAI visualization:
 
 ```bash
-python scripts/run_xai.py?
+python src/xai/run_metrics.py        # custom Grad-CAM / Grad-CAM++ / EigenCAM / Score-CAM
+python src/xai/run_gradcam_pkg.py    # pytorch-grad-cam with aug_smooth and content masking
 ```
 
 ---
@@ -252,9 +267,10 @@ Generated outputs are stored in:
 
 ```text
 data/outputs/
-├── models/   # trained models and configs
-├── logs/     # module logs
-└── xai/      # Grad-CAM visualizations
+├── models/            # trained model weights, configs, history, plots
+├── logs/              # module logs
+├── xai_results/       # custom XAI method outputs
+└── xai_gradcam_pkg/   # pytorch-grad-cam outputs
 ```
 
 Typical generated files:
