@@ -6,3 +6,4 @@ albumentations
 scikit-learn
 grad-cam
 opencv-python
+pillow
