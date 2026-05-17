@@ -27,8 +27,7 @@ def generate_heatmap(model, image_tensor, target_layer, class_idx=None):
     acts_flat = acts.view(C, -1)
     acts_flat = acts_flat - acts_flat.mean(dim=1, keepdim=True)
 
-    # SVD: first right singular vector (Vt[0]) is the spatial direction that
-    # explains the most variance across all C feature maps.
+    # SVD
     try:
         _, _, Vt = torch.linalg.svd(acts_flat, full_matrices=False)
         v1 = Vt[0]
