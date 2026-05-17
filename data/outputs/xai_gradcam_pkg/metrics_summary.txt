@@ -1,0 +1,16 @@
+============================================================================
+ XAI Metrics Summary  --  All Test Images (pytorch-grad-cam)
+ Model: resnet18_mlp_freezeFalse_lr0.01_wd0.0001.pt
+ Images: 169 (C:\Users\rithi\Desktop\UOS\ITP_CancerDetection_XAI_Model\data\test_images)
+============================================================================
+
+  Method           Drop Mean   Drop Std    IC Mean    IC Std
+  ------------------------------------------------------------------------
+  Grad-CAM            45.94%     49.67%      6.52%    15.65%
+  Grad-CAM++          45.89%     49.63%      6.52%    15.65%
+  EigenCAM            45.99%     49.72%      6.52%    15.65%
+  HiResCAM            45.94%     49.67%      6.52%    15.65%
+============================================================================
+
+  Drop%: lower = better localisation
+  IC%:   lower = less spurious confidence boost
