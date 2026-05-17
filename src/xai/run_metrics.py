@@ -27,7 +27,7 @@ from src.utils.seed import set_seed
 
 MODEL_PATH  = PROJECT_ROOT / "data" / "outputs" / "models" / "resnet18_mlp_freezeFalse_lr0.01_wd0.0001.pt"
 IMAGE_DIR   = PROJECT_ROOT / "data" / "test_images"
-OUTPUT_DIR  = PROJECT_ROOT / "data" / "outputs" / "xai_test"
+OUTPUT_DIR  = PROJECT_ROOT / "data" / "outputs" / "xai_results"
 
 CLASS_NAMES  = {0: "Normal (Type 1)", 1: "Cancer (Type 4)"}
 CLASS_DIRS   = {"normal": 0, "cancer": 1}
