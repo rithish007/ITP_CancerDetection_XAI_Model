@@ -13,4 +13,4 @@
 ============================================================================
 
   Drop%: lower = better localisation
-  IC%:   lower = less spurious confidence boost; ideally 0%
+  IC%:   lower = less spurious confidence boost

@@ -75,7 +75,6 @@ def masked_confidence(model, image_tensor, heatmap, pred_idx, device):
 
 
 def resize_original(image_pil, image_size):
-    """Resize with aspect-ratio padding — same spatial layout the model sees, no normalisation."""
     return np.array(ResizeWithPadding(image_size)(image_pil))
 
 
