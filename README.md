@@ -1,4 +1,4 @@
-# ITP_CancerDetection_XAI_Model
+# Explainable AI for Cancer Cell Classification
 
 Deep learning pipeline for cancer vs normal cell classification using microscopy images, including explainable AI (XAI) analysis for model interpretability.
 
