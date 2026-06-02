@@ -24,7 +24,7 @@ def generate_heatmap(model, image_tensor, target_layer, class_idx=None, batch_si
     C    = acts.shape[1]
     h, w = image_tensor.shape[2], image_tensor.shape[3]
 
-    # Baseline: forward pass on a zeroed image
+    # Baseline forward pass on a zeroed image
     baseline = torch.zeros_like(image_tensor)
     with torch.no_grad():
         baseline_logits = model(baseline)

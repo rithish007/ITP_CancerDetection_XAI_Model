@@ -27,7 +27,7 @@ from src.utils.seed import set_seed
 
 MODEL_PATH  = PROJECT_ROOT / "data" / "outputs" / "models" / "resnet18_mlp_freezeFalse_lr0.01_wd0.0001.pt"
 IMAGE_DIR   = PROJECT_ROOT / "data" / "test_images"
-OUTPUT_DIR  = PROJECT_ROOT / "data" / "outputs" / "xai_test"
+OUTPUT_DIR  = PROJECT_ROOT / "data" / "outputs" / "xai_results"
 
 CLASS_NAMES  = {0: "Normal (Type 1)", 1: "Cancer (Type 4)"}
 CLASS_DIRS   = {"normal": 0, "cancer": 1}
@@ -75,7 +75,6 @@ def masked_confidence(model, image_tensor, heatmap, pred_idx, device):
 
 
 def resize_original(image_pil, image_size):
-    """Resize with aspect-ratio padding — same spatial layout the model sees, no normalisation."""
     return np.array(ResizeWithPadding(image_size)(image_pil))
 
 
@@ -108,7 +107,7 @@ def save_comparison_plot(original_rgb, overlays,
 
     plt.tight_layout()
     save_path = output_dir / f"compare_{image_stem}.png"
-    plt.savefig(save_path, dpi=400, bbox_inches="tight")
+    plt.savefig(save_path, dpi=150, bbox_inches="tight")
     plt.close()
     return save_path
 
@@ -180,6 +179,7 @@ def main():
                 )
             gc_conf = masked_confidence(model, image_tensor, heatmap_gc, pred_idx, device)
             gc_drop = max(0.0, (orig_conf - gc_conf) / orig_conf) * 100
+            gc_ic   = max(0.0, (gc_conf - orig_conf) / orig_conf) * 100
 
             # Grad-CAM++ (gradients required)
             with torch.enable_grad():
@@ -188,6 +188,7 @@ def main():
                 )
             pp_conf = masked_confidence(model, image_tensor, heatmap_pp, pred_idx, device)
             pp_drop = max(0.0, (orig_conf - pp_conf) / orig_conf) * 100
+            pp_ic   = max(0.0, (pp_conf - orig_conf) / orig_conf) * 100
 
             # EigenCAM (no gradients needed)
             heatmap_eigen = generate_heatmap_eigen(
@@ -195,6 +196,7 @@ def main():
             )
             eigen_conf = masked_confidence(model, image_tensor, heatmap_eigen, pred_idx, device)
             eigen_drop = max(0.0, (orig_conf - eigen_conf) / orig_conf) * 100
+            eigen_ic   = max(0.0, (eigen_conf - orig_conf) / orig_conf) * 100
 
             # Score-CAM (gradient-free, perturbation-based)
             heatmap_sc = generate_heatmap_sc(
@@ -202,6 +204,7 @@ def main():
             )
             sc_conf = masked_confidence(model, image_tensor, heatmap_sc, pred_idx, device)
             sc_drop = max(0.0, (orig_conf - sc_conf) / orig_conf) * 100
+            sc_ic   = max(0.0, (sc_conf - orig_conf) / orig_conf) * 100
 
             # Comparison plot — original pixel values, no normalisation distortion
             original_rgb = resize_original(image, config["image_size"])
@@ -229,20 +232,24 @@ def main():
                 "original_conf":     round(orig_conf * 100, 2),
                 "gc_masked_conf":    round(gc_conf    * 100, 2),
                 "gc_drop_pct":       round(gc_drop,   2),
+                "gc_ic_pct":         round(gc_ic,     2),
                 "gcpp_masked_conf":  round(pp_conf    * 100, 2),
                 "gcpp_drop_pct":     round(pp_drop,   2),
+                "gcpp_ic_pct":       round(pp_ic,     2),
                 "eigen_masked_conf": round(eigen_conf * 100, 2),
                 "eigen_drop_pct":    round(eigen_drop, 2),
+                "eigen_ic_pct":      round(eigen_ic,  2),
                 "sc_masked_conf":    round(sc_conf    * 100, 2),
                 "sc_drop_pct":       round(sc_drop,   2),
+                "sc_ic_pct":         round(sc_ic,     2),
             })
 
             logger.info(
                 f"  orig={orig_conf*100:.1f}%  |  "
-                f"GC drop={gc_drop:.1f}%  |  "
-                f"GC++ drop={pp_drop:.1f}%  |  "
-                f"Eigen drop={eigen_drop:.1f}%  |  "
-                f"Score-CAM drop={sc_drop:.1f}%"
+                f"GC drop={gc_drop:.1f}% IC={gc_ic:.1f}%  |  "
+                f"GC++ drop={pp_drop:.1f}% IC={pp_ic:.1f}%  |  "
+                f"Eigen drop={eigen_drop:.1f}% IC={eigen_ic:.1f}%  |  "
+                f"Score-CAM drop={sc_drop:.1f}% IC={sc_ic:.1f}%"
             )
 
         except Exception as e:
@@ -261,42 +268,50 @@ def main():
     logger.info(f"CSV saved: {csv_path}")
 
     # Summary table
-    drop_vals = {
-        "Grad-CAM":   [r["gc_drop_pct"]    for r in rows],
-        "Grad-CAM++": [r["gcpp_drop_pct"]  for r in rows],
-        "EigenCAM":   [r["eigen_drop_pct"] for r in rows],
-        "Score-CAM":  [r["sc_drop_pct"]    for r in rows],
+    method_keys = {
+        "Grad-CAM":   ("gc_drop_pct",    "gc_ic_pct"),
+        "Grad-CAM++": ("gcpp_drop_pct",  "gcpp_ic_pct"),
+        "EigenCAM":   ("eigen_drop_pct", "eigen_ic_pct"),
+        "Score-CAM":  ("sc_drop_pct",    "sc_ic_pct"),
     }
 
-    sep = "=" * 58
+    sep = "=" * 76
     logger.info(f"\n{sep}")
-    logger.info(f"  {'Method':<14}  {'Drop Mean':>10}  {'Drop Std':>9}")
-    logger.info(f"  {'-'*54}")
-    for method, d in drop_vals.items():
+    logger.info(f"  {'Method':<14}  {'Drop Mean':>10}  {'Drop Std':>9}  {'IC Mean':>9}  {'IC Std':>8}")
+    logger.info(f"  {'-'*72}")
+    for method, (dk, ik) in method_keys.items():
+        drop_vals = [r[dk] for r in rows]
+        ic_vals   = [r[ik] for r in rows]
         logger.info(
-            f"  {method:<14}  {float(np.mean(d)):>9.2f}%  {float(np.std(d)):>8.2f}%"
+            f"  {method:<14}  {float(np.mean(drop_vals)):>9.2f}%  {float(np.std(drop_vals)):>8.2f}%"
+            f"  {float(np.mean(ic_vals)):>8.2f}%  {float(np.std(ic_vals)):>7.2f}%"
         )
     logger.info(sep)
     logger.info("  Drop%: lower = better localisation (CAM captures what the model uses)")
+    logger.info("  IC%:   lower = less spurious confidence boost")
     logger.info(sep)
     logger.info(f"Outputs: {OUTPUT_DIR}")
 
     # Save metrics summary to output folder
     summary_path = OUTPUT_DIR / "metrics_summary.txt"
     with open(summary_path, "w", encoding="utf-8") as f:
-        f.write("=" * 58 + "\n")
+        f.write("=" * 76 + "\n")
         f.write(" XAI Metrics Summary  --  All Test Images\n")
         f.write(f" Model: {MODEL_PATH.name}\n")
         f.write(f" Images: {len(rows)} ({IMAGE_DIR})\n")
-        f.write("=" * 58 + "\n\n")
-        f.write(f"  {'Method':<14}  {'Drop Mean':>10}  {'Drop Std':>9}\n")
-        f.write(f"  {'-'*54}\n")
-        for method, d in drop_vals.items():
+        f.write("=" * 76 + "\n\n")
+        f.write(f"  {'Method':<14}  {'Drop Mean':>10}  {'Drop Std':>9}  {'IC Mean':>9}  {'IC Std':>8}\n")
+        f.write(f"  {'-'*72}\n")
+        for method, (dk, ik) in method_keys.items():
+            drop_vals = [r[dk] for r in rows]
+            ic_vals   = [r[ik] for r in rows]
             f.write(
-                f"  {method:<14}  {float(np.mean(d)):>9.2f}%  {float(np.std(d)):>8.2f}%\n"
+                f"  {method:<14}  {float(np.mean(drop_vals)):>9.2f}%  {float(np.std(drop_vals)):>8.2f}%"
+                f"  {float(np.mean(ic_vals)):>8.2f}%  {float(np.std(ic_vals)):>7.2f}%\n"
             )
-        f.write("=" * 58 + "\n\n")
+        f.write("=" * 76 + "\n\n")
         f.write("  Drop%: lower = better localisation\n")
+        f.write("  IC%:   lower = less spurious confidence boost\n")
     logger.info(f"Metrics summary saved: {summary_path}")
 
 

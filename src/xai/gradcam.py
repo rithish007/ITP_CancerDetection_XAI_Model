@@ -18,13 +18,13 @@ def generate_heatmap(model, image_tensor, target_layer, class_idx=None):
     fwd_handle = target_layer.register_forward_hook(forward_hook)
     bwd_handle = target_layer.register_full_backward_hook(backward_hook)
 
-    # Forward pass: fills activations[] via the hook
+    # Forward pass
     logits = model(image_tensor)
 
     if class_idx is None:
         class_idx = logits.argmax(dim=1).item()
 
-    # Backward pass: fills gradients[] via the hook
+    # Backward pass
     model.zero_grad()
     logits[0, class_idx].backward()
 
@@ -36,7 +36,7 @@ def generate_heatmap(model, image_tensor, target_layer, class_idx=None):
     acts  = activations[0].detach()
     grads = gradients[0].detach()
 
-    # Global-average-pool the gradients over the spatial dims
+    # Global average pool the gradients over the spatial dims
     weights = grads.mean(dim=(2, 3), keepdim=True)
 
     # Weighted sum of feature maps
